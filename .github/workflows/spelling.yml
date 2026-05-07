@@ -69,9 +69,6 @@ on:
       - "opened"
       - "reopened"
       - "synchronize"
-  issue_comment:
-    types:
-      - "created"
 
 jobs:
   spelling:
@@ -81,10 +78,6 @@ jobs:
       pull-requests: read
       actions: read
       security-events: write
-    outputs:
-      followup: ${{ steps.spelling.outputs.followup }}
-      internal_state_directory: ${{ steps.spelling.outputs.internal_state_directory }}
-      docker_container: ${{ steps.spelling.outputs.docker_container }}
     env:
       workflow_check_commit_messages: commits
     runs-on: ubuntu-latest
@@ -158,81 +151,3 @@ jobs:
           not-lower-pattern: '[^\p{Ll}\p{Lm}]'
           not-upper-or-lower-pattern: '[^\p{Lu}\p{Lt}\p{Lm}]'
           punctuation-pattern: "'"
-
-  comment-push:
-    name: Report (Push)
-    # If your workflow isn't running on push, you can remove this job
-    runs-on: ubuntu-latest
-    needs: spelling
-    permissions:
-      contents: write
-    if: ${{
-      (success() || failure()) &&
-      needs.spelling.outputs.followup &&
-      github.repository_owner != 'check-spelling' &&
-      github.event_name == 'push'
-      }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Comment
-        uses: ./
-        with:
-          checkout: false
-          spell_check_this: check-spelling/spell-check-this@prerelease
-          task: ${{ needs.spelling.outputs.followup }}
-          internal_state_directory: ${{ needs.spelling.outputs.docker_container && needs.spelling.outputs.internal_state_directory }}
-          caller_container: ${{ needs.spelling.outputs.docker_container }}
-
-  comment-pr:
-    name: Report (PR)
-    # If you workflow isn't running on pull_request*, you can remove this job
-    runs-on: ubuntu-latest
-    needs: spelling
-    permissions:
-      contents: read
-      pull-requests: write
-    if: ${{
-      (success() || failure()) &&
-      needs.spelling.outputs.followup &&
-      github.repository_owner != 'check-spelling' &&
-      contains(github.event_name, 'pull_request')
-      }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Comment
-        uses: ./
-        with:
-          checkout: false
-          spell_check_this: check-spelling/spell-check-this@prerelease
-          task: ${{ needs.spelling.outputs.followup }}
-          internal_state_directory: ${{ needs.spelling.outputs.docker_container && needs.spelling.outputs.internal_state_directory }}
-          caller_container: ${{ needs.spelling.outputs.docker_container }}
-          experimental_apply_changes_via_bot: 1
-
-  update:
-    name: Update PR
-    permissions:
-      contents: write
-      pull-requests: write
-      actions: read
-    runs-on: ubuntu-latest
-    if: ${{
-      github.repository_owner != 'check-spelling' &&
-      github.event_name == 'issue_comment' &&
-      github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@check-spelling-bot apply')
-      }}
-    concurrency:
-      group: spelling-update-${{ github.event.issue.number }}
-      cancel-in-progress: false
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Apply spelling updates
-        uses: ./
-        with:
-          experimental_apply_changes_via_bot: 1
-          checkout: false
-          ssh_key: "${{ secrets.CHECK_SPELLING }}"
